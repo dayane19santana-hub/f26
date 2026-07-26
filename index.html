@@ -132,7 +132,20 @@ nav button:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
 .cat-add input{flex:1;min-width:0;border:1px solid var(--line);border-radius:8px;padding:7px 10px;font-family:'IBM Plex Mono',monospace;font-size:13px;background:var(--mist);color:var(--ink)}
 .cat-add input:focus{outline:2px solid var(--teal);outline-offset:-1px;background:var(--card)}
 .cat-add button{border:1px solid var(--line-2);background:var(--card);border-radius:8px;padding:0 14px;cursor:pointer;font-size:18px;line-height:1;color:var(--ink-2);font-family:'IBM Plex Mono',monospace}
-.cat-add button:hover{background:var(--ink);color:#fff;border-color:var(--ink)}
+.cat-add button{font-family:'Inter',sans-serif;font-size:12px;font-weight:600;padding:0 11px}
+.cat-add .bcred{color:var(--plum);border-color:var(--plum)}
+.cat-add .bcred:hover{background:var(--plum);color:#fff}
+.cat-add .bdeb{color:var(--teal);border-color:var(--teal)}
+.cat-add .bdeb:hover{background:var(--teal);color:#fff}
+.cat-cred{font-size:11.5px;color:var(--plum);margin-top:5px}
+.lancs{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
+.lanc{display:inline-flex;align-items:center;gap:5px;border-radius:99px;padding:4px 9px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:500;cursor:pointer;border:1px solid}
+.lanc.cr{background:var(--plum-bg);border-color:#d6c8e0;color:var(--plum)}
+.lanc.db{background:var(--teal-bg);border-color:#bcd6d2;color:var(--teal)}
+.lanc .lx{font-family:'Inter',sans-serif;font-size:13px;opacity:.55;line-height:1}
+.lanc:hover{background:var(--clay-bg);border-color:var(--clay);color:var(--clay)}
+.lanc:hover .lx{opacity:1}
+.lanc:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
 .total-strip{display:flex;justify-content:space-between;align-items:center;margin-top:14px;padding:12px 16px;border-radius:10px;background:var(--mist)}
 .total-strip span{font-size:13px;color:var(--muted)}
 .total-strip strong{font-family:'IBM Plex Mono',monospace;font-size:18px;font-weight:600}
@@ -407,6 +420,19 @@ function migrar(s){
   if(!s.gastos||typeof s.gastos!=='object') s.gastos={};
   if(!s.cascata||typeof s.cascata!=='object') s.cascata={};
   (s.cfg.meses||[]).forEach(m=>{if(m.faturaBase===undefined&&m.fatura!==undefined)m.faturaBase=m.fatura;});
+  Object.keys(s.gastos).forEach(mk=>{
+    const g=s.gastos[mk]; if(!g||typeof g!=='object') return;
+    Object.keys(g).forEach(id=>{
+      if(id.endsWith('#c')) return;
+      if(typeof g[id]==='number'){
+        const tot=g[id], cr=+g[id+'#c']||0, lista=[];
+        if(cr>0) lista.push({v:cr,c:1});
+        if(tot-cr>0) lista.push({v:tot-cr,c:0});
+        g[id]=lista;
+      }
+    });
+    Object.keys(g).forEach(id=>{if(id.endsWith('#c')) delete g[id];});
+  });
   return s;
 }
 function save(){try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){console.warn('Falha ao salvar:',e);}}
@@ -422,6 +448,10 @@ function mKey(m,i){return m&&m.n?slug(m.n):'m'+i;}
 const keyDe=i=>mKey(cfg().meses[i],i);
 const keyAtual=()=>keyDe(S.mes);
 function G(i){const k=keyDe(i===undefined?S.mes:i);if(!S.gastos[k])S.gastos[k]={};return S.gastos[k];}
+/* cada categoria guarda uma lista de lançamentos: {v:valor, c:1 se crédito} */
+function L(g,id){if(!Array.isArray(g[id]))g[id]=[];return g[id];}
+const somaCat=(g,id)=>L(g,id).reduce((a,e)=>a+(+e.v||0),0);
+const credCat=(g,id)=>L(g,id).reduce((a,e)=>a+(e.c?(+e.v||0):0),0);
 function C(){const k=keyAtual();if(!S.cascata[k])S.cascata[k]={};return S.cascata[k];}
 
 function indiceDoMesDeHoje(){
@@ -445,7 +475,7 @@ function catsDo(m){
 function creditoDe(i){
   const m=cfg().meses[i];if(!m)return 0;
   const g=S.gastos[keyDe(i)]||{};
-  return catsDo(m).filter(c=>c.cred).reduce((a,c)=>a+(g[c.id]||0),0);
+  return catsDo(m).reduce((a,c)=>a+credCat(g,c.id),0);
 }
 /* fatura paga no dia 01 de cada mês */
 const faturaBaseDe=i=>{const m=cfg().meses[i];return m?(+m.faturaBase||+m.fatura||0):0;};
@@ -524,7 +554,7 @@ function renderStatus(){
   if(cred>0&&prox) out.push(`<div class="note plum"><strong>${fmt(cred)} no crédito este mês.</strong> Isso entra na fatura de 01/${(prox.n||'').slice(0,3).toLowerCase()}, então você precisa reservar ${fmt(reservarDe(S.mes))} — e a sobra deste mês cai para ${fmt(sobraDo(S.mes))}.</div>`);
 
   catsDo(m).forEach(x=>{
-    const v=g[x.id]||0;
+    const v=somaCat(g,x.id);
     if(x.teto===0&&v>0) out.push(`<div class="note clay"><strong>${fmt(v)} em ${x.n}.</strong> O teto dessa categoria é zero.${x.hist?` Sua média foi ${fmt(x.hist)} por mês.`:''}</div>`);
     else if(x.teto>0&&v>x.teto) out.push(`<div class="note clay"><strong>${x.n} passou do teto.</strong> ${fmt(v)} contra ${fmt(x.teto)} previstos.${x.hist?` Sua média é ${fmt(x.hist)} — dá para segurar.`:''}</div>`);
     else if(x.teto>0&&v>=x.teto*0.8) out.push(`<div class="note gold"><strong>${x.n} perto do limite.</strong> Restam ${fmt(x.teto-v)}.</div>`);
@@ -598,14 +628,14 @@ function renderMes(){
 function renderGastos(){
   const m=mesAtual(),cats=catsDo(m),g=G(),prox=cfg().meses[S.mes+1];
   $('#g-title').textContent=m?`Variáveis de ${m.n||'este mês'}`:'Variáveis do mês';
-  $('#g-hint').textContent=m?`Digite o valor e toque em +. O que for no crédito entra na fatura de ${prox?(prox.n||'próximo mês'):'próximo mês'}.`:'Digite o valor e toque em + para somar.';
+  $('#g-hint').textContent=m?`Digite o valor e escolha crédito ou débito. O que for no crédito entra na fatura de 01/${prox?(prox.n||'').slice(0,3).toLowerCase():'—'}.`:'Digite o valor e escolha crédito ou débito. Toque num lançamento para apagar.';
   $('#z-hint').textContent=m?`Zera os gastos e desmarca a cascata só de ${m.n||'este mês'}.`:'Zera os gastos do mês aberto.';
   if(!cats.length){
     $('#cats').innerHTML='<div class="note teal">Cadastre suas categorias na aba Ajustes.</div>';
     $('#cat-total').textContent='—';$('#cat-rest').textContent='—';$('#cred-strip').hidden=true;return;
   }
   $('#cats').innerHTML=cats.map(x=>{
-    const v=g[x.id]||0,teto=+x.teto||0;
+    const v=somaCat(g,x.id),vc=credCat(g,x.id),teto=+x.teto||0;
     const pct=teto>0?Math.min(100,(v/teto)*100):(v>0?100:0);
     const cor=teto===0?(v>0?'var(--clay)':'var(--teal)'):pct>=100?'var(--clay)':pct>=80?'var(--gold)':'var(--teal)';
     let warn='';
@@ -614,28 +644,48 @@ function renderGastos(){
     else if(teto>0&&pct>=80) warn=`<div class="cat-warn" style="background:var(--gold-bg);color:#6b5009">Restam ${fmt(teto-v)}.</div>`;
     return `<div class="cat">
       <div class="cat-top">
-        <span class="cat-name">${x.n||'Categoria'}${x.cred?'<span class="cat-tag">crédito</span>':''}${x.hist>0?` <span class="cat-hist">média ${fmt(x.hist)}</span>`:''}</span>
+        <span class="cat-name">${x.n||'Categoria'}${x.hist>0?` <span class="cat-hist">média ${fmt(x.hist)}</span>`:''}</span>
         <span class="cat-nums"><b style="color:${v>0?cor:'var(--muted-2)'}">${fmt(v)}</b> <span class="of">/ ${fmt(teto)}</span></span>
       </div>
       <div class="track"><div class="fill" style="width:${pct}%;background:${cor}"></div></div>
+      ${vc>0?`<div class="cat-cred">${fmt(vc)} no crédito${v>vc?` · ${fmt(v-vc)} no débito`:''}</div>`:''}
+      ${L(g,x.id).length?`<div class="lancs">${L(g,x.id).map((e,k)=>
+        `<button class="lanc ${e.c?'cr':'db'}" data-del="${x.id}" data-k="${k}" title="Apagar este lançamento">
+          ${fmt(e.v)}<span class="lx">×</span></button>`).join('')}</div>`:''}
       ${warn}
       <div class="cat-add">
-        <input type="number" step="0.01" inputmode="decimal" placeholder="somar valor" data-in="${x.id}" aria-label="Somar em ${x.n}">
-        <button data-add="${x.id}" aria-label="Somar em ${x.n}">+</button>
+        <input type="number" step="0.01" inputmode="decimal" placeholder="valor" data-in="${x.id}" aria-label="Valor gasto em ${x.n}">
+        <button class="bcred" data-add="${x.id}" data-cred="1" aria-label="Somar em ${x.n} no crédito">crédito</button>
+        <button class="bdeb" data-add="${x.id}" data-cred="0" aria-label="Somar em ${x.n} no débito">débito</button>
       </div></div>`;
   }).join('');
   $('#cats').querySelectorAll('[data-add]').forEach(b=>{
     b.addEventListener('click',()=>{
-      const id=b.dataset.add,inp=$('#cats').querySelector(`[data-in="${id}"]`);
+      const id=b.dataset.add,cred=b.dataset.cred==='1';
+      const inp=$('#cats').querySelector(`[data-in="${id}"]`);
       const v=parseFloat(inp.value);
-      if(!isNaN(v)&&v!==0){const gg=G();gg[id]=Math.max(0,(gg[id]||0)+v);save();renderAll(false);}
-      else inp.focus();
+      if(isNaN(v)||v===0){inp.focus();return;}
+      if(v<0){inp.value='';inp.focus();return;}
+      L(G(),id).push({v:v,c:cred?1:0});
+      inp.value='';save();renderAll(false);
+    });
+  });
+  $('#cats').querySelectorAll('[data-del]').forEach(b=>{
+    b.addEventListener('click',()=>{
+      L(G(),b.dataset.del).splice(+b.dataset.k,1);
+      save();renderAll(false);
     });
   });
   $('#cats').querySelectorAll('[data-in]').forEach(inp=>{
-    inp.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();$('#cats').querySelector(`[data-add="${inp.dataset.in}"]`).click();}});
+    inp.addEventListener('keydown',e=>{
+      if(e.key!=='Enter')return;
+      e.preventDefault();
+      const cat=cfg().cats.find((c,j)=>'c'+j===inp.dataset.in);
+      const usarCred=cat?!!cat.cred:false;
+      $('#cats').querySelector(`[data-add="${inp.dataset.in}"][data-cred="${usarCred?1:0}"]`).click();
+    });
   });
-  const total=cats.reduce((a,x)=>a+(g[x.id]||0),0),cred=creditoDe(S.mes),sobra=sobraDo(S.mes);
+  const total=cats.reduce((a,x)=>a+somaCat(g,x.id),0),cred=creditoDe(S.mes),sobra=sobraDo(S.mes);
   $('#cat-total').textContent=fmt(total);
   $('#cred-strip').hidden=!(cred>0);
   $('#cred-lbl').textContent=`No crédito · vai para a fatura de ${prox?(prox.n||'próximo mês'):'próximo mês'}`;
@@ -707,7 +757,7 @@ function renderAjustes(){
       <input type="text" placeholder="Categoria" value="${esc(x.n)}" data-cn="${i}">
       <input type="number" step="0.01" inputmode="decimal" placeholder="teto" value="${x.teto||''}" data-ct="${i}">
       <input type="number" step="0.01" inputmode="decimal" placeholder="média" value="${x.hist||''}" data-ch="${i}">
-      <label class="credlab"><input type="checkbox" data-cc="${i}" ${x.cred?'checked':''}> crédito</label>
+      <label class="credlab"><input type="checkbox" data-cc="${i}" ${x.cred?'checked':''}> crédito por padrão</label>
       <button class="rm" data-crm="${i}" aria-label="Remover">×</button>
     </div>`).join('')||'<p style="font-size:12.5px;color:var(--muted-2);margin-bottom:6px">Nenhuma categoria cadastrada.</p>';
 

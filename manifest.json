@@ -1,0 +1,17 @@
+{
+  "name": "Plano — controle financeiro",
+  "short_name": "Plano",
+  "description": "Cascata do dia 05, tetos de gasto e acompanhamento das dívidas.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#14202b",
+  "theme_color": "#14202b",
+  "lang": "pt-BR",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

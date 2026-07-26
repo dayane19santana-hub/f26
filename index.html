@@ -243,10 +243,11 @@ footer{text-align:center;font-size:11.5px;color:var(--muted-2);padding:24px 16px
     <p class="hint">Toque num valor para atualizar. Salva sozinho neste navegador.</p>
     <div class="balances">
       <div class="bal"><label for="b-pf">Conta principal</label><input id="b-pf" type="number" step="0.01" inputmode="decimal"></div>
-      <div class="bal pj"><label for="b-pj">Conta secundária</label><input id="b-pj" type="number" step="0.01" inputmode="decimal"></div>
+      <div class="bal pj"><label for="b-pj">Poupança</label><input id="b-pj" type="number" step="0.01" inputmode="decimal"></div>
       <div class="bal cx"><label for="b-cx">Reserva</label><input id="b-cx" type="number" step="0.01" inputmode="decimal"></div>
     </div>
     <div class="net"><span>Total disponível</span><strong id="net-total">—</strong></div>
+    <div id="poup-hint" style="font-size:11.5px;color:var(--plum);margin-top:8px;line-height:1.5"></div>
   </div>
 
   <div class="card">
@@ -339,6 +340,14 @@ footer{text-align:center;font-size:11.5px;color:var(--muted-2);padding:24px 16px
       <p>Quanto cai na conta todo mês, já livre de impostos e custos.</p>
       <div class="field"><label for="cfg-renda">Valor mensal</label>
         <input id="cfg-renda" type="number" step="0.01" inputmode="decimal" placeholder="0"></div>
+    </div>
+
+    <div class="msec">
+      <h3>Saldos automáticos</h3>
+      <p>Quando ligado, marcar um passo da cascata já desconta da conta, guarda na reserva ou soma na poupança.</p>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:4px">
+        <input type="checkbox" id="cfg-auto"> Mover os saldos ao marcar a cascata
+      </label>
     </div>
 
     <div class="msec">
@@ -487,6 +496,30 @@ function reservarDe(i){
   return faturaBaseDe(i+1)+creditoDe(i);
 }
 
+/* quanto já foi separado para a dívida à vista nos meses anteriores */
+function acumuladoDivida(i){
+  let t=0;
+  cfg().meses.forEach((m,j)=>{ if(j<i && !m.quita) t+=(+m.guardar||0); });
+  return t;
+}
+/* marcar um passo move o dinheiro entre os saldos da tela inicial */
+function aplicarSaldos(step,i,marcou){
+  if(cfg().autoSaldo===false) return;
+  const m=cfg().meses[i]; if(!m) return;
+  const v=Math.abs(+step.val||0);
+  let dPf=0,dCx=0,dPp=0;
+  if(step.id==='in'){ if(m.entradaJaNaConta) return; dPf=v; }
+  else if(step.id==='res'){ dPf=v; dCx=-v; }            // usar da reserva
+  else if(step.id==='fat'){ dPf=-v; dCx=v; }            // reservar para a fatura
+  else if(step.id==='gd'){ dPf=-v; dPp=m.quita?-acumuladoDivida(i):v; }
+  else if(step.id==='pp'){ dPf=-v; dPp=v; }
+  else { dPf=-v; }                                       // fixos e parcela
+  const r=x=>Math.round(x*100)/100;
+  if(dPf) S.saldos.pf=r((+S.saldos.pf||0)+(marcou?dPf:-dPf));
+  if(dCx) S.saldos.cx=r((+S.saldos.cx||0)+(marcou?dCx:-dCx));
+  if(dPp) S.saldos.pj=r((+S.saldos.pj||0)+(marcou?dPp:-dPp));
+}
+
 function cascataDo(i){
   const m=cfg().meses[i];if(!m)return[];
   const c=cfg(),s=[],res=reservarDe(i),cred=creditoDe(i),prox=c.meses[i+1];
@@ -498,7 +531,7 @@ function cascataDo(i){
     note:m.daReservaNota||'Dinheiro que já estava guardado',val:daRes,income:true});
   if(res>0) s.push({id:'fat',
     name:`Reservar para a fatura de 01/${prox?(prox.n||'').slice(0,3).toLowerCase():'—'}`,
-    note:(m.reservar!==undefined&&m.reservar!==null&&m.reservar!=='')?'Valor definido para este mês'
+    note:(m.reservar!==undefined&&m.reservar!==null&&m.reservar!=='')?'Ao marcar, sai da conta e entra na Reserva'
       :(cred>0?`${fmt(faturaBaseDe(i+1))} de parcelas e assinaturas + ${fmt(cred)} que você já pôs no crédito`
               :'Parcelas e assinaturas já contratadas'),
     val:-res});
@@ -507,8 +540,13 @@ function cascataDo(i){
     s.push({id:'f'+j,name:f.n||'Conta fixa',note:'',val:-(+f.v||0)});
   });
   if(c.dA.valor>0&&!m.semParcela) s.push({id:'dA',name:c.dA.n||'Parcela',note:'Confira se saiu',val:-(+c.dA.valor||0)});
-  if(m.guardar>0) s.push({id:'gd',name:m.quita?`Quitar ${c.dB.n||'dívida'}`:`Separar para ${c.dB.n||'dívida'}`,note:m.quita?'Somando o que foi guardado antes':'Tirar da conta principal agora',val:-m.guardar,save:true});
-  if(m.poupanca>0) s.push({id:'pp',name:'Poupança',note:'Separe antes das variáveis',val:-m.poupanca,save:true});
+  if(m.guardar>0) s.push({id:'gd',
+    name:m.quita?`Quitar ${c.dB.n||'dívida'}`:`Separar para ${c.dB.n||'dívida'}`,
+    note:m.quita?`Sai da Poupança o que já foi guardado (${fmt(acumuladoDivida(i))}) mais este valor`
+                :'Ao marcar, sai da conta e entra na Poupança',
+    val:-m.guardar,save:true});
+  if(m.poupanca>0) s.push({id:'pp',name:'Poupança',
+    note:'Ao marcar, sai da conta e entra na Poupança',val:-m.poupanca,save:true});
   return s;
 }
 const sobraDo=i=>cascataDo(i).reduce((a,s)=>a+s.val,0);
@@ -531,6 +569,10 @@ function renderSaldos(){
   $('#b-pf').value=S.saldos.pf||'';$('#b-pj').value=S.saldos.pj||'';$('#b-cx').value=S.saldos.cx||'';
   $('#net-total').textContent=brl2((+S.saldos.pf||0)+(+S.saldos.pj||0)+(+S.saldos.cx||0));
   $('#onboard').hidden=temPlano();
+  const acu=acumuladoDivida(cfg().meses.length), dB=cfg().dB;
+  $('#poup-hint').textContent = (dB.valor>0&&!S.dBpago)
+    ? `Os saldos se movem sozinhos conforme você marca a cascata. Plano até dezembro: ${fmt(acu)} separados para ${dB.n||'a dívida'}.`
+    : 'Os saldos se movem sozinhos conforme você marca a cascata.';
 }
 ['pf','pj','cx'].forEach(k=>{
   $('#b-'+k).addEventListener('input',e=>{
@@ -547,6 +589,20 @@ function renderStatus(){
     $('#status-notes').innerHTML='<div class="note teal">Preencha o plano na aba Ajustes para os alertas começarem a funcionar.</div>';
     return;
   }
+  /* andamento da cascata do mês aberto */
+  const passos=cascataDo(S.mes), cc=C();
+  const gastosPassos=passos.filter(s=>!s.income);
+  const feitos=gastosPassos.filter(s=>cc[s.id]).length;
+  if(gastosPassos.length){
+    const falta=gastosPassos.filter(s=>!cc[s.id]).reduce((a,s)=>a+Math.abs(s.val),0);
+    if(feitos===0)
+      out.push(`<div class="note gold"><strong>Cascata de ${m?m.n:'este mês'} ainda não começou.</strong> São ${gastosPassos.length} pagamentos somando ${fmt(falta)}.</div>`);
+    else if(feitos<gastosPassos.length)
+      out.push(`<div class="note gold"><strong>${feitos} de ${gastosPassos.length} pagamentos marcados.</strong> Faltam ${fmt(falta)} — o próximo é ${gastosPassos.find(s=>!cc[s.id]).name}.</div>`);
+    else
+      out.push(`<div class="note teal"><strong>Cascata de ${m?m.n:'este mês'} concluída.</strong> Tudo marcado. O que sobrou é para as variáveis.</div>`);
+  }
+
   const iHoje=indiceDoMesDeHoje();
   if(iHoje>=0&&iHoje!==S.mes) out.push(`<div class="note gold"><strong>Você está vendo ${m?m.n:'outro mês'}.</strong> O mês de hoje é ${c.meses[iHoje].n}. Os gastos que você lançar agora entram no mês aberto.</div>`);
 
@@ -617,7 +673,13 @@ function renderMes(){
       <span class="step-val">${s.val>0?'+':''}${fmt(s.val)}</span></label>`;
   }).join('');
   box.querySelectorAll('input[data-c]').forEach(x=>{
-    x.addEventListener('change',e=>{C()[e.target.dataset.c]=e.target.checked;save();renderMes();});
+    x.addEventListener('change',e=>{
+      const id=e.target.dataset.c, on=e.target.checked;
+      C()[id]=on;
+      const step=c.find(s=>s.id===id);
+      if(step) aplicarSaldos(step,i,on);
+      save();renderAll(false);
+    });
   });
   let left=0;c.forEach(s=>{if(cc[s.id])left+=s.val;});
   const el=$('#casc-left');el.textContent=fmt(left);el.classList.toggle('neg',left<0);
@@ -713,7 +775,7 @@ function renderDividas(){
     el.style.gridTemplateColumns=`repeat(${Math.min(tot,12)},1fr)`;
     el.innerHTML=Array.from({length:tot},(_,i)=>`<button class="pill ${i<pag?'paid':''}" data-i="${i+1}" aria-label="Parcela ${i+1} de ${tot}"></button>`).join('');
     el.querySelectorAll('.pill').forEach(b=>{
-      b.addEventListener('click',()=>{const n=+b.dataset.i;S.parcelas=(S.parcelas===n)?n-1:n;save();renderDividas();renderStatus();renderHead();});
+      b.addEventListener('click',()=>{const n=+b.dataset.i;S.parcelas=(S.parcelas===n)?n-1:n;save();renderAll(false);});
     });
     $('#dA-note').textContent='Toque num quadrado para marcar as parcelas pagas.';
   }
@@ -730,7 +792,7 @@ function renderDividas(){
     $('#dB-btn').textContent=S.dBpago?'Reabrir':'Quitar';
   }
 }
-$('#dB-btn').addEventListener('click',()=>{S.dBpago=!S.dBpago;save();renderDividas();renderStatus();renderHead();});
+$('#dB-btn').addEventListener('click',()=>{S.dBpago=!S.dBpago;save();renderAll(false);});
 
 /* ---------- AJUSTES ---------- */
 function bindNum(sel,get,set){const el=$(sel);el.value=get()||'';el.oninput=()=>{set(parseFloat(el.value)||0);save();renderAll(false);};}
@@ -739,6 +801,8 @@ function bindTxt(sel,get,set){const el=$(sel);el.value=get()||'';el.oninput=()=>
 function renderAjustes(){
   const c=cfg(),esc=s=>(s||'').replace(/"/g,'&quot;');
   bindNum('#cfg-renda',()=>c.renda,v=>c.renda=v);
+  const au=$('#cfg-auto'); au.checked=c.autoSaldo!==false;
+  au.onchange=()=>{c.autoSaldo=au.checked;save();};
   bindTxt('#cfg-dA-n',()=>c.dA.n,v=>c.dA.n=v);
   bindNum('#cfg-dA-v',()=>c.dA.valor,v=>c.dA.valor=v);
   bindNum('#cfg-dA-t',()=>c.dA.total,v=>c.dA.total=Math.max(1,Math.round(v)||12));

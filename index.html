@@ -463,6 +463,9 @@ function cascataDo(i){
   const prop=(m.renda!==undefined&&m.renda!==null&&m.renda!=='');
   s.push({id:'in',name:prop?(m.rendaNome||'Recursos disponíveis'):'Entrada do mês',
     note:prop?'Valor só deste mês':'',val:prop?(+m.renda||0):(+c.renda||0),income:true});
+  const daRes=+m.daReserva||0;
+  if(daRes>0) s.push({id:'res',name:'Usar da reserva',
+    note:m.daReservaNota||'Dinheiro que já estava guardado',val:daRes,income:true});
   if(res>0) s.push({id:'fat',
     name:`Reservar para a fatura de 01/${prox?(prox.n||'').slice(0,3).toLowerCase():'—'}`,
     note:(m.reservar!==undefined&&m.reservar!==null&&m.reservar!=='')?'Valor definido para este mês'
@@ -723,8 +726,10 @@ function renderAjustes(){
       <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);margin-top:4px">
         <input type="checkbox" data-mq="${i}" ${m.quita?'checked':''}> Neste mês a dívida é quitada</label>
       <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);margin-top:4px">
-        <input type="checkbox" data-ms="${i}" ${m.semParcela?'checked':''}> Este mês não tem a parcela do acordo
-      </label>
+        <input type="checkbox" data-ms="${i}" ${m.semParcela?'checked':''}> Este mês não tem a parcela do acordo</label>
+      <div class="field" style="margin:8px 0 0"><label>Usar da reserva neste mês</label>
+        <input type="number" step="0.01" inputmode="decimal" placeholder="0" value="${m.daReserva||''}" data-mr="${i}">
+      </div>
     </div>`).join('')||'<p style="font-size:12.5px;color:var(--muted-2);margin-bottom:6px">Nenhum mês cadastrado.</p>';
 
   const on=(sel,ev,fn)=>$('#p-ajustes').querySelectorAll(sel).forEach(el=>el.addEventListener(ev,fn));
@@ -742,6 +747,7 @@ function renderAjustes(){
   on('[data-mp]','input',e=>{c.meses[+e.target.dataset.mp].poupanca=parseFloat(e.target.value)||0;save();renderMes();});
   on('[data-mq]','change',e=>{c.meses[+e.target.dataset.mq].quita=e.target.checked;save();renderMes();});
   on('[data-ms]','change',e=>{c.meses[+e.target.dataset.ms].semParcela=e.target.checked;save();renderAll(false);});
+  on('[data-mr]','input',e=>{c.meses[+e.target.dataset.mr].daReserva=parseFloat(e.target.value)||0;save();renderAll(false);});
   on('[data-mrm]','click',e=>{c.meses.splice(+e.target.dataset.mrm,1);S.mes=0;save();renderAjustes();renderMes();});
 }
 $('#add-fixo').addEventListener('click',()=>{cfg().fixos.push({n:'',v:0});save();renderAjustes();});

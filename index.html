@@ -48,13 +48,14 @@ nav button:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
 .card h2{font-family:'Bricolage Grotesque',sans-serif;font-size:17px;font-weight:600;letter-spacing:-.01em;margin-bottom:4px}
 .card .hint{font-size:12.5px;color:var(--muted);margin-bottom:15px;line-height:1.5}
 
-.balances{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.balances{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
 .bal{background:var(--mist);border-radius:10px;padding:11px 10px;border:1px solid transparent}
 .bal:focus-within{border-color:var(--teal)}
 .bal label{display:block;font-size:11px;color:var(--muted);margin-bottom:4px;font-weight:500}
 .bal input{width:100%;border:0;background:transparent;font-family:'IBM Plex Mono',monospace;font-size:17px;font-weight:600;color:var(--ink)}
 .bal input:focus{outline:none}
 .bal.pj input{color:var(--plum)} .bal.cx input{color:var(--teal)}
+.bal.re input{color:var(--clay)}
 .net{display:flex;justify-content:space-between;align-items:baseline;margin-top:11px;padding-top:11px;border-top:1px solid var(--line)}
 .net span{font-size:13px;color:var(--muted)}
 .net strong{font-family:'IBM Plex Mono',monospace;font-size:20px;font-weight:600}
@@ -136,8 +137,19 @@ nav button:focus-visible{outline:2px solid var(--teal);outline-offset:2px}
 .cat-add .bcred{color:var(--plum);border-color:var(--plum)}
 .cat-add .bcred:hover{background:var(--plum);color:#fff}
 .cat-add .bdeb{color:var(--teal);border-color:var(--teal)}
+.cat-add .bguard{color:var(--clay);border-color:var(--clay);flex:1}
+.cat-add .bguard:hover{background:var(--clay);color:#fff}
 .cat-add .bdeb:hover{background:var(--teal);color:#fff}
 .cat-cred{font-size:11.5px;color:var(--plum);margin-top:5px}
+.mover{display:flex;gap:6px;margin-top:12px}
+.mover input{flex:1;min-width:0;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-family:'IBM Plex Mono',monospace;font-size:13px;background:var(--mist);color:var(--ink)}
+.mover input:focus{outline:2px solid var(--plum);outline-offset:-1px;background:var(--card)}
+.mover button{border:1px solid;border-radius:8px;padding:0 13px;cursor:pointer;font-family:'Inter',sans-serif;font-size:12px;font-weight:600;background:var(--card)}
+.mover .mv-in{color:var(--plum);border-color:var(--plum)}
+.mover .mv-in:hover{background:var(--plum);color:#fff}
+.mover .mv-out{color:var(--muted);border-color:var(--line-2)}
+.mover .mv-out:hover{background:var(--ink);color:#fff;border-color:var(--ink)}
+.mover-hint{font-size:11px;color:var(--muted-2);margin-top:5px;line-height:1.5}
 .lancs{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
 .lanc{display:inline-flex;align-items:center;gap:5px;border-radius:99px;padding:4px 9px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:500;cursor:pointer;border:1px solid}
 .lanc.cr{background:var(--plum-bg);border-color:#d6c8e0;color:var(--plum)}
@@ -244,10 +256,17 @@ footer{text-align:center;font-size:11.5px;color:var(--muted-2);padding:24px 16px
     <div class="balances">
       <div class="bal"><label for="b-pf">Conta principal</label><input id="b-pf" type="number" step="0.01" inputmode="decimal"></div>
       <div class="bal pj"><label for="b-pj">Poupança</label><input id="b-pj" type="number" step="0.01" inputmode="decimal"></div>
-      <div class="bal cx"><label for="b-cx">Reserva</label><input id="b-cx" type="number" step="0.01" inputmode="decimal"></div>
+      <div class="bal cx"><label for="b-cx">Reserva da fatura</label><input id="b-cx" type="number" step="0.01" inputmode="decimal"></div>
+      <div class="bal re"><label for="b-re">Reserva extra</label><input id="b-re" type="number" step="0.01" inputmode="decimal"></div>
     </div>
     <div class="net"><span>Total disponível</span><strong id="net-total">—</strong></div>
     <div id="poup-hint" style="font-size:11.5px;color:var(--plum);margin-top:8px;line-height:1.5"></div>
+    <div class="mover">
+      <input id="mv-val" type="number" step="0.01" inputmode="decimal" placeholder="valor" aria-label="Valor a mover">
+      <button class="mv-in" id="mv-guardar">guardar</button>
+      <button class="mv-out" id="mv-resgatar">resgatar</button>
+    </div>
+    <div class="mover-hint">Guardar tira da conta e põe na Poupança. Resgatar faz o contrário.</div>
   </div>
 
   <div class="card">
@@ -403,7 +422,7 @@ const KEY='plano-v3';
 
 const VAZIO={
   cfg:{renda:0,fixos:[],cats:[],dA:{n:'',valor:0,total:12},dB:{n:'',valor:0},meses:[]},
-  saldos:{pf:0,pj:0,cx:0},
+  saldos:{pf:0,pj:0,cx:0,re:0},
   mes:0, autoKey:'', cascata:{}, gastos:{}, parcelas:0, dBpago:false
 };
 
@@ -566,23 +585,36 @@ function renderHead(){
 
 /* ---------- SALDOS ---------- */
 function renderSaldos(){
-  $('#b-pf').value=S.saldos.pf||'';$('#b-pj').value=S.saldos.pj||'';$('#b-cx').value=S.saldos.cx||'';
-  $('#net-total').textContent=brl2((+S.saldos.pf||0)+(+S.saldos.pj||0)+(+S.saldos.cx||0));
+  $('#b-pf').value=S.saldos.pf||'';$('#b-pj').value=S.saldos.pj||'';
+  $('#b-cx').value=S.saldos.cx||'';$('#b-re').value=S.saldos.re||'';
+  $('#net-total').textContent=brl2((+S.saldos.pf||0)+(+S.saldos.pj||0)+(+S.saldos.cx||0)+(+S.saldos.re||0));
   $('#onboard').hidden=temPlano();
   const acu=acumuladoDivida(cfg().meses.length), dB=cfg().dB;
   $('#poup-hint').textContent = (dB.valor>0&&!S.dBpago)
     ? `Os saldos se movem sozinhos conforme você marca a cascata. Plano até dezembro: ${fmt(acu)} separados para ${dB.n||'a dívida'}.`
     : 'Os saldos se movem sozinhos conforme você marca a cascata.';
 }
-['pf','pj','cx'].forEach(k=>{
+['pf','pj','cx','re'].forEach(k=>{
   $('#b-'+k).addEventListener('input',e=>{
     S.saldos[k]=parseFloat(e.target.value)||0;save();
-    $('#net-total').textContent=brl2((+S.saldos.pf||0)+(+S.saldos.pj||0)+(+S.saldos.cx||0));
+    $('#net-total').textContent=brl2((+S.saldos.pf||0)+(+S.saldos.pj||0)+(+S.saldos.cx||0)+(+S.saldos.re||0));
     renderStatus();
   });
 });
 
 /* ---------- STATUS ---------- */
+function moverEntreSaldos(sinal){
+  const el=$('#mv-val'), v=parseFloat(el.value);
+  if(isNaN(v)||v<=0){el.focus();return;}
+  const r=x=>Math.round(x*100)/100;
+  S.saldos.pf=r((+S.saldos.pf||0)-sinal*v);
+  S.saldos.pj=r((+S.saldos.pj||0)+sinal*v);
+  el.value=''; save(); renderAll(false);
+}
+$('#mv-guardar').addEventListener('click',()=>moverEntreSaldos(1));
+$('#mv-resgatar').addEventListener('click',()=>moverEntreSaldos(-1));
+$('#mv-val').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();moverEntreSaldos(1);}});
+
 function renderStatus(){
   const out=[],m=mesAtual(),c=cfg(),g=G();
   if(!temPlano()){
@@ -717,8 +749,9 @@ function renderGastos(){
       ${warn}
       <div class="cat-add">
         <input type="number" step="0.01" inputmode="decimal" placeholder="valor" data-in="${x.id}" aria-label="Valor gasto em ${x.n}">
-        <button class="bcred" data-add="${x.id}" data-cred="1" aria-label="Somar em ${x.n} no crédito">crédito</button>
-        <button class="bdeb" data-add="${x.id}" data-cred="0" aria-label="Somar em ${x.n} no débito">débito</button>
+        ${x.guarda?`<button class="bguard" data-add="${x.id}" data-cred="0" aria-label="Guardar em ${x.n}">guardar</button>`
+        :`<button class="bcred" data-add="${x.id}" data-cred="1" aria-label="Somar em ${x.n} no crédito">crédito</button>
+        <button class="bdeb" data-add="${x.id}" data-cred="0" aria-label="Somar em ${x.n} no débito">débito</button>`}
       </div></div>`;
   }).join('');
   $('#cats').querySelectorAll('[data-add]').forEach(b=>{
@@ -729,12 +762,25 @@ function renderGastos(){
       if(isNaN(v)||v===0){inp.focus();return;}
       if(v<0){inp.value='';inp.focus();return;}
       L(G(),id).push({v:v,c:cred?1:0});
+      const cat=catsDo(mesAtual()).find(x=>x.id===id);
+      if(cat&&cat.guarda&&cfg().autoSaldo!==false){
+        const r=x=>Math.round(x*100)/100;
+        S.saldos.pf=r((+S.saldos.pf||0)-v);
+        S.saldos.re=r((+S.saldos.re||0)+v);
+      }
       inp.value='';save();renderAll(false);
     });
   });
   $('#cats').querySelectorAll('[data-del]').forEach(b=>{
     b.addEventListener('click',()=>{
-      L(G(),b.dataset.del).splice(+b.dataset.k,1);
+      const id=b.dataset.del, k=+b.dataset.k;
+      const rem=L(G(),id).splice(k,1)[0];
+      const cat=catsDo(mesAtual()).find(x=>x.id===id);
+      if(rem&&cat&&cat.guarda&&cfg().autoSaldo!==false){
+        const r=x=>Math.round(x*100)/100;
+        S.saldos.pf=r((+S.saldos.pf||0)+(+rem.v||0));
+        S.saldos.re=r((+S.saldos.re||0)-(+rem.v||0));
+      }
       save();renderAll(false);
     });
   });
@@ -822,6 +868,7 @@ function renderAjustes(){
       <input type="number" step="0.01" inputmode="decimal" placeholder="teto" value="${x.teto||''}" data-ct="${i}">
       <input type="number" step="0.01" inputmode="decimal" placeholder="média" value="${x.hist||''}" data-ch="${i}">
       <label class="credlab"><input type="checkbox" data-cc="${i}" ${x.cred?'checked':''}> crédito por padrão</label>
+      <label class="credlab"><input type="checkbox" data-cg="${i}" ${x.guarda?'checked':''}> vai para a reserva extra</label>
       <button class="rm" data-crm="${i}" aria-label="Remover">×</button>
     </div>`).join('')||'<p style="font-size:12.5px;color:var(--muted-2);margin-bottom:6px">Nenhuma categoria cadastrada.</p>';
 
@@ -854,6 +901,7 @@ function renderAjustes(){
   on('[data-ct]','input',e=>{c.cats[+e.target.dataset.ct].teto=parseFloat(e.target.value)||0;save();renderGastos();});
   on('[data-ch]','input',e=>{c.cats[+e.target.dataset.ch].hist=parseFloat(e.target.value)||0;save();});
   on('[data-cc]','change',e=>{c.cats[+e.target.dataset.cc].cred=e.target.checked;save();renderAll(false);});
+  on('[data-cg]','change',e=>{c.cats[+e.target.dataset.cg].guarda=e.target.checked;save();renderAll(false);});
   on('[data-crm]','click',e=>{c.cats.splice(+e.target.dataset.crm,1);save();renderAjustes();renderGastos();});
   on('[data-mn]','input',e=>{c.meses[+e.target.dataset.mn].n=e.target.value;save();});
   on('[data-mf]','input',e=>{c.meses[+e.target.dataset.mf].faturaBase=parseFloat(e.target.value)||0;save();renderMes();});

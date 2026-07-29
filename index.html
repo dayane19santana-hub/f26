@@ -259,7 +259,10 @@ footer{text-align:center;font-size:11.5px;color:var(--muted-2);padding:24px 16px
       <div class="bal cx"><label for="b-cx">Reserva da fatura</label><input id="b-cx" type="number" step="0.01" inputmode="decimal"></div>
       <div class="bal re"><label for="b-re">Reserva extra</label><input id="b-re" type="number" step="0.01" inputmode="decimal"></div>
     </div>
-    <div class="net"><span>Total disponível</span><strong id="net-total">—</strong></div>
+    <div class="net"><span>Livre para gastar</span><strong id="net-livre">—</strong></div>
+    <div class="net" style="border-top:0;padding-top:2px;margin-top:2px">
+      <span style="font-size:12px;color:var(--muted-2)">Somando tudo que é seu</span>
+      <strong id="net-total" style="font-size:15px;color:var(--muted)">—</strong></div>
     <div id="poup-hint" style="font-size:11.5px;color:var(--plum);margin-top:8px;line-height:1.5"></div>
     <div class="mover">
       <input id="mv-val" type="number" step="0.01" inputmode="decimal" placeholder="valor" aria-label="Valor a mover">
@@ -584,10 +587,15 @@ function renderHead(){
 }
 
 /* ---------- SALDOS ---------- */
+function atualizaTotais(){
+  const pf=+S.saldos.pf||0,pj=+S.saldos.pj||0,cx=+S.saldos.cx||0,re=+S.saldos.re||0;
+  $('#net-livre').textContent=brl2(pf);
+  $('#net-total').textContent=brl2(pf+pj+cx+re);
+}
 function renderSaldos(){
   $('#b-pf').value=S.saldos.pf||'';$('#b-pj').value=S.saldos.pj||'';
   $('#b-cx').value=S.saldos.cx||'';$('#b-re').value=S.saldos.re||'';
-  $('#net-total').textContent=brl2((+S.saldos.pf||0)+(+S.saldos.pj||0)+(+S.saldos.cx||0)+(+S.saldos.re||0));
+  atualizaTotais();
   $('#onboard').hidden=temPlano();
   const acu=acumuladoDivida(cfg().meses.length), dB=cfg().dB;
   $('#poup-hint').textContent = (dB.valor>0&&!S.dBpago)
@@ -597,7 +605,7 @@ function renderSaldos(){
 ['pf','pj','cx','re'].forEach(k=>{
   $('#b-'+k).addEventListener('input',e=>{
     S.saldos[k]=parseFloat(e.target.value)||0;save();
-    $('#net-total').textContent=brl2((+S.saldos.pf||0)+(+S.saldos.pj||0)+(+S.saldos.cx||0)+(+S.saldos.re||0));
+    atualizaTotais();
     renderStatus();
   });
 });

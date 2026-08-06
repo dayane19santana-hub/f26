@@ -301,7 +301,7 @@ footer{text-align:center;font-size:11.5px;color:var(--muted-2);padding:24px 16px
     <h2>A cascata do dia do pagamento</h2>
     <p class="hint">Marque na ordem. O topo mostra o que ainda resta na conta.</p>
     <div class="cascade-head">
-      <div><div class="lbl">Ainda na conta</div></div>
+      <div><div class="lbl">Livre para gastar</div></div>
       <div class="amt" id="casc-left">—</div>
     </div>
     <div id="casc-steps"></div>
@@ -353,6 +353,7 @@ footer{text-align:center;font-size:11.5px;color:var(--muted-2);padding:24px 16px
       <button class="btn primary" id="export">Baixar cópia</button>
       <button class="btn" id="import-btn">Restaurar cópia</button>
       <input type="file" id="import-file" accept="application/json,.json" hidden>
+      <button class="btn" id="recalc">Recalcular saldos</button>
       <button class="btn danger" id="reset">Apagar tudo</button>
     </div>
   </div>
@@ -729,6 +730,8 @@ function renderMes(){
     });
   });
   let left=0;c.forEach(s=>{if(cc[s.id])left+=s.val;});
+  const gMes=G(i), gastoMes=catsDo(m).reduce((a,x)=>a+somaCat(gMes,x.id),0);
+  left = (cfg().autoSaldo!==false) ? (+S.saldos.pf||0) : (left-gastoMes);
   const el=$('#casc-left');el.textContent=fmt(left);el.classList.toggle('neg',left<0);
   $('#casc-final').textContent=fmt(sobra);
 }
@@ -987,6 +990,33 @@ $('#import-file').addEventListener('change',e=>{
     }catch(err){alert('Não deu para ler esse arquivo. Confira se é a cópia salva por aqui.');}
   };
   r.readAsText(f);e.target.value='';
+});
+$('#recalc').addEventListener('click',()=>{
+  if(!confirm('Refazer os saldos a partir do que está marcado na cascata e dos gastos lançados?\n\nUse se os números tiverem saído do lugar.'))return;
+  const r=x=>Math.round(x*100)/100;
+  let pf=0,cx=0,pp=0,re=0;
+  cfg().meses.forEach((m,i)=>{
+    const cc=S.cascata[keyDe(i)]||{}, g=G(i), passos=cascataDo(i);
+    passos.forEach(s=>{
+      if(!cc[s.id])return;
+      const v=Math.abs(+s.val||0);
+      if(s.id==='in'){ if(!m.entradaJaNaConta) pf=r(pf+v); }
+      else if(s.id==='res'){ pf=r(pf+v); cx=r(cx-v); }
+      else if(s.id==='fat'){ pf=r(pf-v); cx=r(cx+v); }
+      else if(s.id==='gd'){ pf=r(pf-v); pp=m.quita?r(pp-acumuladoDivida(i)):r(pp+v); }
+      else if(s.id==='pp'){ pf=r(pf-v); pp=r(pp+v); }
+      else pf=r(pf-v);
+    });
+    catsDo(m).forEach(x=>{
+      const soma=somaCat(g,x.id), cr=credCat(g,x.id);
+      if(!soma)return;
+      pf=r(pf-soma);
+      if(x.guarda) re=r(re+soma); else cx=r(cx+cr);
+    });
+  });
+  S.saldos={pf:pf,pj:pp,cx:cx,re:re};
+  save();renderAll();
+  alert('Saldos refeitos.');
 });
 $('#reset').addEventListener('click',()=>{
   if(!confirm('Apagar tudo, inclusive o plano?'))return;

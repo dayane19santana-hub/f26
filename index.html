@@ -515,7 +515,7 @@ const faturaBaseDe=i=>{const m=cfg().meses[i];return m?(+m.faturaBase||+m.fatura
 function reservarDe(i){
   const m=cfg().meses[i];if(!m)return 0;
   if(m.reservar!==undefined&&m.reservar!==null&&m.reservar!=='') return +m.reservar||0;
-  return faturaBaseDe(i+1)+creditoDe(i);
+  return faturaBaseDe(i+1);
 }
 
 /* quanto já foi separado para a dívida à vista nos meses anteriores */
@@ -553,9 +553,7 @@ function cascataDo(i){
     note:m.daReservaNota||'Dinheiro que já estava guardado',val:daRes,income:true});
   if(res>0) s.push({id:'fat',
     name:`Reservar para a fatura de 01/${prox?(prox.n||'').slice(0,3).toLowerCase():'—'}`,
-    note:(m.reservar!==undefined&&m.reservar!==null&&m.reservar!=='')?'Ao marcar, sai da conta e entra na Reserva'
-      :(cred>0?`${fmt(faturaBaseDe(i+1))} de parcelas e assinaturas + ${fmt(cred)} que você já pôs no crédito`
-              :'Parcelas e assinaturas já contratadas'),
+    note:'Parcelas e assinaturas já contratadas. O que você puser no crédito vai somando aqui sozinho.',
     val:-res});
   c.fixos.forEach((f,j)=>{
     if((m.semFixo||[]).includes(j)) return;
@@ -647,7 +645,7 @@ function renderStatus(){
   if(iHoje>=0&&iHoje!==S.mes) out.push(`<div class="note gold"><strong>Você está vendo ${m?m.n:'outro mês'}.</strong> O mês de hoje é ${c.meses[iHoje].n}. Os gastos que você lançar agora entram no mês aberto.</div>`);
 
   const cred=creditoDe(S.mes), prox=c.meses[S.mes+1];
-  if(cred>0&&prox) out.push(`<div class="note plum"><strong>${fmt(cred)} no crédito este mês.</strong> Isso entra na fatura de 01/${(prox.n||'').slice(0,3).toLowerCase()}, então você precisa reservar ${fmt(reservarDe(S.mes))} — e a sobra deste mês cai para ${fmt(sobraDo(S.mes))}.</div>`);
+  if(cred>0&&prox) out.push(`<div class="note plum"><strong>${fmt(cred)} no crédito este mês.</strong> Já foi separado na Reserva da fatura, que vence em 01/${(prox.n||'').slice(0,3).toLowerCase()} somando ${fmt(faturaBaseDe(S.mes+1)+cred)}.</div>`);
 
   catsDo(m).forEach(x=>{
     const v=somaCat(g,x.id);
@@ -696,13 +694,13 @@ function renderMes(){
   const prox2=cfg().meses[i+1],credM=creditoDe(i),manual=(m.reservar!==undefined&&m.reservar!==null&&m.reservar!=='');
   $('#fat-hint').textContent=manual
     ?'Valor definido manualmente para este mês.'
-    :(prox2?`Fatura que vence em 01/${(prox2.n||'').slice(0,3).toLowerCase()}: o que já está contratado mais o crédito que você usar agora.`
+    :(prox2?`Fatura que vence em 01/${(prox2.n||'').slice(0,3).toLowerCase()}. A base sai da conta no dia do pagamento; o crédito vai somando conforme você lança.`
            :'Não há mês seguinte registrado para calcular a reserva.');
   $('#fatbox').innerHTML=manual?`
     <div class="fatrow tot"><span>A reservar neste mês</span><b>${fmt(reservarDe(i))}</b></div>`:`
     <div class="fatrow"><span>Parcelas e assinaturas</span><b>${fmt(faturaBaseDe(i+1))}</b></div>
-    <div class="fatrow add"><span>Crédito que você lançou em ${m.n||'este mês'}</span><b>+${fmt(credM)}</b></div>
-    <div class="fatrow tot"><span>A reservar neste mês</span><b>${fmt(reservarDe(i))}</b></div>`;
+    <div class="fatrow add"><span>Crédito lançado em ${m.n||'este mês'}</span><b>+${fmt(credM)}</b></div>
+    <div class="fatrow tot"><span>Total da fatura</span><b>${fmt(faturaBaseDe(i+1)+credM)}</b></div>`;
 
   const box=$('#casc-steps');
   box.innerHTML=c.map(s=>{
@@ -771,10 +769,11 @@ function renderGastos(){
       if(v<0){inp.value='';inp.focus();return;}
       L(G(),id).push({v:v,c:cred?1:0});
       const cat=catsDo(mesAtual()).find(x=>x.id===id);
-      if(cat&&cat.guarda&&cfg().autoSaldo!==false){
+      if(cfg().autoSaldo!==false){
         const r=x=>Math.round(x*100)/100;
         S.saldos.pf=r((+S.saldos.pf||0)-v);
-        S.saldos.re=r((+S.saldos.re||0)+v);
+        if(cat&&cat.guarda) S.saldos.re=r((+S.saldos.re||0)+v);
+        else if(cred)       S.saldos.cx=r((+S.saldos.cx||0)+v);
       }
       inp.value='';save();renderAll(false);
     });
@@ -784,10 +783,11 @@ function renderGastos(){
       const id=b.dataset.del, k=+b.dataset.k;
       const rem=L(G(),id).splice(k,1)[0];
       const cat=catsDo(mesAtual()).find(x=>x.id===id);
-      if(rem&&cat&&cat.guarda&&cfg().autoSaldo!==false){
-        const r=x=>Math.round(x*100)/100;
-        S.saldos.pf=r((+S.saldos.pf||0)+(+rem.v||0));
-        S.saldos.re=r((+S.saldos.re||0)-(+rem.v||0));
+      if(rem&&cfg().autoSaldo!==false){
+        const r=x=>Math.round(x*100)/100, vv=+rem.v||0;
+        S.saldos.pf=r((+S.saldos.pf||0)+vv);
+        if(cat&&cat.guarda) S.saldos.re=r((+S.saldos.re||0)-vv);
+        else if(rem.c)      S.saldos.cx=r((+S.saldos.cx||0)-vv);
       }
       save();renderAll(false);
     });
@@ -852,6 +852,38 @@ $('#dB-btn').addEventListener('click',()=>{S.dBpago=!S.dBpago;save();renderAll(f
 function bindNum(sel,get,set){const el=$(sel);el.value=get()||'';el.oninput=()=>{set(parseFloat(el.value)||0);save();renderAll(false);};}
 function bindTxt(sel,get,set){const el=$(sel);el.value=get()||'';el.oninput=()=>{set(el.value);save();renderDividas();};}
 
+/* remover um fixo/categoria desloca as posições — reindexar o que aponta para elas */
+function reindexFixo(k){
+  cfg().meses.forEach((m,mi)=>{
+    if(Array.isArray(m.semFixo))
+      m.semFixo=m.semFixo.filter(j=>j!==k).map(j=>j>k?j-1:j);
+    const cc=S.cascata[keyDe(mi)];
+    if(cc){
+      const novo={};
+      Object.keys(cc).forEach(id=>{
+        if(!/^f\d+$/.test(id)){novo[id]=cc[id];return;}
+        const j=+id.slice(1);
+        if(j===k) return;
+        novo['f'+(j>k?j-1:j)]=cc[id];
+      });
+      S.cascata[keyDe(mi)]=novo;
+    }
+  });
+}
+function reindexCat(k){
+  Object.keys(S.gastos).forEach(mk=>{
+    const g=S.gastos[mk]; if(!g) return;
+    const novo={};
+    Object.keys(g).forEach(id=>{
+      if(!/^c\d+$/.test(id)){novo[id]=g[id];return;}
+      const j=+id.slice(1);
+      if(j===k) return;
+      novo['c'+(j>k?j-1:j)]=g[id];
+    });
+    S.gastos[mk]=novo;
+  });
+}
+
 function renderAjustes(){
   const c=cfg(),esc=s=>(s||'').replace(/"/g,'&quot;');
   bindNum('#cfg-renda',()=>c.renda,v=>c.renda=v);
@@ -904,13 +936,13 @@ function renderAjustes(){
   const on=(sel,ev,fn)=>$('#p-ajustes').querySelectorAll(sel).forEach(el=>el.addEventListener(ev,fn));
   on('[data-fn]','input',e=>{c.fixos[+e.target.dataset.fn].n=e.target.value;save();});
   on('[data-fv]','input',e=>{c.fixos[+e.target.dataset.fv].v=parseFloat(e.target.value)||0;save();renderMes();});
-  on('[data-frm]','click',e=>{c.fixos.splice(+e.target.dataset.frm,1);save();renderAjustes();renderMes();});
+  on('[data-frm]','click',e=>{const k=+e.target.dataset.frm;reindexFixo(k);c.fixos.splice(k,1);save();renderAjustes();renderAll(false);});
   on('[data-cn]','input',e=>{c.cats[+e.target.dataset.cn].n=e.target.value;save();});
   on('[data-ct]','input',e=>{c.cats[+e.target.dataset.ct].teto=parseFloat(e.target.value)||0;save();renderGastos();});
   on('[data-ch]','input',e=>{c.cats[+e.target.dataset.ch].hist=parseFloat(e.target.value)||0;save();});
   on('[data-cc]','change',e=>{c.cats[+e.target.dataset.cc].cred=e.target.checked;save();renderAll(false);});
   on('[data-cg]','change',e=>{c.cats[+e.target.dataset.cg].guarda=e.target.checked;save();renderAll(false);});
-  on('[data-crm]','click',e=>{c.cats.splice(+e.target.dataset.crm,1);save();renderAjustes();renderGastos();});
+  on('[data-crm]','click',e=>{const k=+e.target.dataset.crm;reindexCat(k);c.cats.splice(k,1);save();renderAjustes();renderAll(false);});
   on('[data-mn]','input',e=>{c.meses[+e.target.dataset.mn].n=e.target.value;save();});
   on('[data-mf]','input',e=>{c.meses[+e.target.dataset.mf].faturaBase=parseFloat(e.target.value)||0;save();renderMes();});
   on('[data-mg]','input',e=>{c.meses[+e.target.dataset.mg].guardar=parseFloat(e.target.value)||0;save();renderMes();});
